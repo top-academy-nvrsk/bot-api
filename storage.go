@@ -1,88 +1,167 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
-	"sync"
+	"log"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Storage struct {
-	mu          sync.Mutex
-	users       map[int]UserRequest
-	anquettes   map[int]AnquetteRequest
-	userCounter int
-	anqCounter  int
+	db *sql.DB
 }
 
-var storage = Storage{
-	users:     make(map[int]UserRequest),
-	anquettes: make(map[int]AnquetteRequest),
+var storage *Storage
+
+func InitStorage(dbPath string) error {
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return err
+	}
+
+	storage = &Storage{db: db}
+
+	if err = db.Ping(); err != nil {
+		return err
+	}
+
+	return storage.createTables()
 }
 
-func insertUser(u UserRequest) int {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
-	storage.userCounter++
-	storage.users[storage.userCounter] = u
-	return storage.userCounter
+func (s *Storage) createTables() error {
+	usersTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		tg_id INTEGER NOT NULL UNIQUE,
+		tg_username TEXT,
+		anquette_id INTEGER
+	);`
+	_, err := s.db.Exec(usersTable)
+	if err != nil {
+		return errors.New("ошибка создания таблицы users: " + err.Error())
+	}
+
+	anquettesTable := `
+	CREATE TABLE IF NOT EXISTS anquettes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		age INTEGER NOT NULL,
+		city TEXT,
+		gender TEXT,
+		preferences TEXT,
+		description TEXT NOT NULL
+	);`
+	_, err = s.db.Exec(anquettesTable)
+	if err != nil {
+		return errors.New("ошибка создания таблицы anquettes: " + err.Error())
+	}
+
+	log.Println("INFO: Таблицы БД успешно инициализированы.")
+	return nil
 }
 
-func getUser(id int) (UserRequest, error) {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
-	u, ok := storage.users[id]
-	if !ok {
-		return UserRequest{}, errors.New("юзер не найден")
+func insertUser(u UserRequest) (int, error) {
+	stmt, err := storage.db.Prepare("INSERT INTO users(tg_id, tg_username, anquette_id) values(?, ?, ?)")
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(u.TgID, u.TgUsername, u.AnquetteID)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id), nil
+}
+
+func getUser(id int) (User, error) {
+	row := storage.db.QueryRow("SELECT id, tg_id, tg_username, anquette_id FROM users WHERE id = ?", id)
+	var u User
+	err := row.Scan(&u.ID, &u.TgID, &u.TgUsername, &u.AnquetteID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, errors.New("юзер не найден")
+		}
+		return User{}, err
 	}
 	return u, nil
 }
 
 func updateUser(id int, u UserRequest) error {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
+	res, err := storage.db.Exec("UPDATE users SET tg_id = ?, tg_username = ?, anquette_id = ? WHERE id = ?",
+		u.TgID, u.TgUsername, u.AnquetteID, id)
+	if err != nil {
+		return err
+	}
 
-	if _, ok := storage.users[id]; !ok {
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
 		return errors.New("юзер не найден, нельзя обновить")
 	}
-	storage.users[id] = u
 	return nil
 }
 
-func insertAnquette(a AnquetteRequest) int {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
-	storage.anqCounter++
-	storage.anquettes[storage.anqCounter] = a
-	return storage.anqCounter
+func insertAnquette(a AnquetteRequest) (int, error) {
+	stmt, err := storage.db.Prepare("INSERT INTO anquettes(name, age, city, gender, preferences, description) values(?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(a.Name, a.Age, a.City, a.Gender, a.Preferences, a.Description)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id), nil
 }
 
-func getAnquette(id int) (AnquetteRequest, error) {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
-	a, ok := storage.anquettes[id]
-	if !ok {
-		return AnquetteRequest{}, errors.New("анкета не найдена")
+func getAnquette(id int) (Anquette, error) {
+	row := storage.db.QueryRow("SELECT id, name, age, city, gender, preferences, description FROM anquettes WHERE id = ?", id)
+	var a Anquette
+	err := row.Scan(&a.ID, &a.Name, &a.Age, &a.City, &a.Gender, &a.Preferences, &a.Description)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Anquette{}, errors.New("анкета не найдена")
+		}
+		return Anquette{}, err
 	}
 	return a, nil
 }
 
 func updateAnquette(id int, a AnquetteRequest) error {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
+	res, err := storage.db.Exec("UPDATE anquettes SET name = ?, age = ?, city = ?, gender = ?, preferences = ?, description = ? WHERE id = ?",
+		a.Name, a.Age, a.City, a.Gender, a.Preferences, a.Description, id)
+	if err != nil {
+		return err
+	}
 
-	if _, ok := storage.anquettes[id]; !ok {
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
 		return errors.New("анкета не найдена")
 	}
-	storage.anquettes[id] = a
 	return nil
 }
 
 func deleteAnquette(id int) error {
-	storage.mu.Lock()
-	defer storage.mu.Unlock()
+	res, err := storage.db.Exec("DELETE FROM anquettes WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
 
-	if _, ok := storage.anquettes[id]; !ok {
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
 		return errors.New("нет такой анкеты")
 	}
-	delete(storage.anquettes, id)
 	return nil
 }
