@@ -1,4 +1,6 @@
-package main
+package domain
+
+// === Модели БД ===
 
 type User struct {
 	ID         int    `json:"id,omitempty"`
@@ -17,6 +19,8 @@ type Anquette struct {
 	Description string `json:"description"`
 }
 
+// === Структуры Запросов ===
+
 type UserRequest struct {
 	TgID       int64  `json:"tg_id"`
 	TgUsername string `json:"tg_username"`
@@ -31,6 +35,8 @@ type AnquetteRequest struct {
 	Preferences string `json:"preferences"`
 	Description string `json:"description"`
 }
+
+// === Структура Ответа API ===
 
 type APIResponse struct {
 	Status string      `json:"status"`
