@@ -15,7 +15,7 @@ import (
 
 func main() {
 	// 1. Инициализация БД
-	db, err := sql.Open("sqlite", "./dating_app.db")
+	db, err := sql.Open("sqlite", "/app/cmd/api/db/dating_app.db")
 	if err != nil {
 		log.Fatalf("FATAL: Ошибка открытия БД: %v", err)
 	}
