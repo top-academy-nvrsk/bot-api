@@ -1,0 +1,12 @@
+version: '3.8'
+services: 
+  go_api: 
+    build: .
+    container_name: go-api-sqlite-app    
+    ports: 
+      - "8080:8080"
+    volumes: 
+      - ./cmd/api/db:/app/data
+    environment: 
+      - SQLITE_DB_PATH=/app/data/dating_app.db 
+    restart: unless-stopped
