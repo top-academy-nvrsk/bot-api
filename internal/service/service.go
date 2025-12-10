@@ -48,9 +48,9 @@ func (s *ServiceImpl) InsertUser(ctx context.Context, req domain.UserRequest) (i
 	return newID, nil
 }
 
-func (s *ServiceImpl) GetUser(ctx context.Context, id int) (domain.User, error) {
+func (s *ServiceImpl) GetUser(ctx context.Context, tg_id int) (domain.User, error) {
 	// Вызов экспортированного метода
-	u, err := s.Repo.GetUser(ctx, id)
+	u, err := s.Repo.GetUser(ctx, tg_id)
 	if err != nil {
 		// Преобразуем ошибку БД в доменную ошибку ErrNotFound
 		if errors.Is(err, sql.ErrNoRows) {
@@ -61,9 +61,9 @@ func (s *ServiceImpl) GetUser(ctx context.Context, id int) (domain.User, error) 
 	return u, nil
 }
 
-func (s *ServiceImpl) UpdateUser(ctx context.Context, id int, req domain.UserRequest) error {
+func (s *ServiceImpl) UpdateUser(ctx context.Context, tg_id int, req domain.UserRequest) error {
 	// Вызов экспортированного метода
-	err := s.Repo.UpdateUser(ctx, id, req)
+	err := s.Repo.UpdateUser(ctx, tg_id, req)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("service: user not found for update: %w", ErrNotFound)
