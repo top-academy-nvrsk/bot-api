@@ -17,8 +17,8 @@ type UserRepository interface {
 	CreateTables() error
 
 	InsertUser(ctx context.Context, u domain.UserRequest) (int, error)
-	GetUser(ctx context.Context, id int) (domain.User, error)
-	UpdateUser(ctx context.Context, id int, u domain.UserRequest) error
+	GetUser(ctx context.Context, tg_id int) (domain.User, error)
+	UpdateUser(ctx context.Context, tg_id int, u domain.UserRequest) error
 
 	InsertAnquette(ctx context.Context, a domain.AnquetteRequest) (int, error)
 	GetAnquette(ctx context.Context, id int) (domain.Anquette, error)
@@ -38,7 +38,6 @@ func (s *Storage) CreateTables() error {
 	// ... (логика создания таблиц)
 	usersTable := `
 	CREATE TABLE IF NOT EXISTS users (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		tg_id INTEGER NOT NULL UNIQUE,
 		tg_username TEXT,
 		anquette_id INTEGER
@@ -69,23 +68,25 @@ func (s *Storage) CreateTables() error {
 // --- Методы User с экспортированными именами ---
 
 func (s *Storage) InsertUser(ctx context.Context, u domain.UserRequest) (int, error) {
-	res, err := s.db.ExecContext(ctx, "INSERT INTO users(tg_id, tg_username, anquette_id) values(?, ?, ?)",
-		u.TgID, u.TgUsername, u.AnquetteID)
+	var id int
+	err := s.db.QueryRowContext(ctx,
+		`INSERT INTO users (tg_id, tg_username, anquette_id)
+         VALUES (?, ?, ?)
+         RETURNING tg_id`,
+		u.TgID, u.TgUsername, u.AnquetteID,
+	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("repository: failed to insert user: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("repository: failed to get last insert ID: %w", err)
-	}
-	return int(id), nil
+
+	return id, nil
 }
 
-func (s *Storage) GetUser(ctx context.Context, id int) (domain.User, error) {
+func (s *Storage) GetUser(ctx context.Context, tg_id int) (domain.User, error) {
 	var u domain.User
-	row := s.db.QueryRowContext(ctx, "SELECT id, tg_id, tg_username, anquette_id FROM users WHERE id = ?", id)
+	row := s.db.QueryRowContext(ctx, "SELECT tg_id, tg_username, anquette_id FROM users WHERE tg_id = ?", tg_id)
 
-	err := row.Scan(&u.ID, &u.TgID, &u.TgUsername, &u.AnquetteID)
+	err := row.Scan(&u.TgID, &u.TgUsername, &u.AnquetteID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.User{}, sql.ErrNoRows
@@ -95,9 +96,9 @@ func (s *Storage) GetUser(ctx context.Context, id int) (domain.User, error) {
 	return u, nil
 }
 
-func (s *Storage) UpdateUser(ctx context.Context, id int, u domain.UserRequest) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE users SET tg_id = ?, tg_username = ?, anquette_id = ? WHERE id = ?",
-		u.TgID, u.TgUsername, u.AnquetteID, id)
+func (s *Storage) UpdateUser(ctx context.Context, tg_id int, u domain.UserRequest) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE users SET tg_id = ?, tg_username = ?, anquette_id = ? WHERE tg_id = ?",
+		u.TgID, u.TgUsername, u.AnquetteID, tg_id)
 	if err != nil {
 		return fmt.Errorf("repository: failed to execute update user: %w", err)
 	}
